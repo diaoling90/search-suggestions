@@ -323,7 +323,22 @@ async function getGoogleSuggestions(keyword) {
     }
 }
 
-// 翻译文本到指定语言 - 详细错误日志版本
+// 检测Cloudflare环境
+function isCloudflareEnvironment() {
+    // 检测Cloudflare Workers环境的标识
+    return (
+        typeof caches !== 'undefined' && 
+        typeof globalThis !== 'undefined' && 
+        'cf' in (globalThis.Request?.prototype || {})
+    ) || (
+        // 检测网页是否通过Cloudflare代理
+        navigator.userAgent.includes('Cloudflare') ||
+        window.location.hostname.includes('.pages.dev') ||
+        document.querySelector('meta[name*="cloudflare"]') !== null
+    );
+}
+
+// 翻译文本到指定语言 - 支持Cloudflare环境
 async function translateText(text, targetLang) {
     // 快速返回英文
     if (targetLang === 'en') return text;
@@ -335,70 +350,23 @@ async function translateText(text, targetLang) {
         return translationCache.get(cacheKey);
     }
     
+    const isCloudflare = isCloudflareEnvironment();
+    console.log(`环境检测: ${isCloudflare ? 'Cloudflare' : '本地/其他'}`);
+    
     try {
         console.log(`=== 开始翻译请求 ===`);
         console.log(`原文: ${text}`);
         console.log(`目标语言: ${targetLang}`);
+        console.log(`环境: ${isCloudflare ? 'Cloudflare' : '本地'}`);
         
-        // 使用Google翻译API
-        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`;
-        console.log(`请求URL: ${url}`);
+        let translated;
         
-        console.log('发送fetch请求...');
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-        
-        console.log(`HTTP响应状态: ${response.status} ${response.statusText}`);
-        console.log(`响应头: ${JSON.stringify(Object.fromEntries(response.headers))}`);
-        
-        if (!response.ok) {
-            console.error(`HTTP请求失败: ${response.status} - ${response.statusText}`);
-            throw new Error(`HTTP错误: ${response.status}`);
-        }
-        
-        console.log('开始读取响应文本...');
-        const responseText = await response.text();
-        console.log(`响应文本长度: ${responseText.length}`);
-        console.log(`响应原始内容: ${responseText}`);
-        
-        if (!responseText || responseText.trim() === '') {
-            console.error('API返回空响应');
-            throw new Error('响应为空');
-        }
-        
-        console.log('开始解析JSON...');
-        let data;
-        try {
-            data = JSON.parse(responseText);
-            console.log('JSON解析成功');
-            console.log(`解析后的数据: ${JSON.stringify(data, null, 2)}`);
-        } catch (jsonError) {
-            console.error('=== JSON解析失败 ===');
-            console.error(`JSON错误: ${jsonError.message}`);
-            console.error(`JSON错误堆栈: ${jsonError.stack}`);
-            console.error(`尝试解析的原始内容: ${responseText}`);
-            console.error(`内容类型: ${typeof responseText}`);
-            console.error(`内容长度: ${responseText.length}`);
-            throw new Error(`JSON解析失败: ${jsonError.message}`);
-        }
-        
-        let translated = text; // 默认返回原文
-        
-        console.log('检查API响应数据结构...');
-        console.log(`responseStatus: ${data.responseStatus}`);
-        console.log(`responseData: ${JSON.stringify(data.responseData)}`);
-        
-        if (data && data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
-            translated = data.responseData.translatedText;
-            console.log(`✅ 翻译成功: ${text} -> ${translated}`);
+        if (isCloudflare) {
+            // Cloudflare环境使用兼容的翻译服务
+            translated = await translateWithCloudflareAPI(text, targetLang);
         } else {
-            console.warn('⚠️ 翻译API返回非成功状态或数据结构异常');
-            console.warn(`完整响应数据: ${JSON.stringify(data, null, 2)}`);
+            // 本地环境使用原来的API
+            translated = await translateWithMyMemoryAPI(text, targetLang);
         }
         
         translationCache.set(cacheKey, translated);
@@ -407,6 +375,7 @@ async function translateText(text, targetLang) {
         await delay(200);
         
         return translated;
+        
     } catch (error) {
         console.error('=== 翻译过程发生错误 ===');
         console.error(`错误类型: ${error.name}`);
@@ -418,6 +387,168 @@ async function translateText(text, targetLang) {
         // 翻译失败直接返回原文
         translationCache.set(cacheKey, text);
         return text;
+    }
+}
+
+// Cloudflare环境下的翻译API
+async function translateWithCloudflareAPI(text, targetLang) {
+    console.log('使用Cloudflare兼容的翻译API');
+    
+    // 使用Microsoft Translator（支持CORS，Cloudflare友好）
+    const endpoint = 'https://api.cognitive.microsofttranslator.com/translate';
+    const params = new URLSearchParams({
+        'api-version': '3.0',
+        'to': targetLang === 'zh' ? 'zh-Hans' : targetLang
+    });
+    
+    try {
+        const response = await fetch(`${endpoint}?${params}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                // 注意：这里需要你自己的API密钥，这只是示例
+                // 'Ocp-Apim-Subscription-Key': 'YOUR_API_KEY'
+            },
+            body: JSON.stringify([{ text: text }])
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Microsoft Translator API错误: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Microsoft Translator响应:', data);
+        
+        if (data && data[0] && data[0].translations && data[0].translations[0]) {
+            const translated = data[0].translations[0].text;
+            console.log(`✅ Microsoft翻译成功: ${text} -> ${translated}`);
+            return translated;
+        }
+        
+        throw new Error('Microsoft Translator返回数据格式异常');
+        
+    } catch (msError) {
+        console.warn('Microsoft Translator失败，尝试备用方案:', msError.message);
+        
+        // 备用方案：使用LibreTranslate
+        return await translateWithLibreTranslate(text, targetLang);
+    }
+}
+
+// LibreTranslate API（开源，Cloudflare友好）
+async function translateWithLibreTranslate(text, targetLang) {
+    console.log('使用LibreTranslate API');
+    
+    const url = 'https://libretranslate.de/translate';
+    
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                q: text,
+                source: 'en',
+                target: targetLang === 'zh' ? 'zh' : targetLang,
+                format: 'text'
+            })
+        });
+        
+        console.log(`LibreTranslate响应状态: ${response.status}`);
+        
+        if (!response.ok) {
+            throw new Error(`LibreTranslate API错误: ${response.status}`);
+        }
+        
+        const responseText = await response.text();
+        console.log('LibreTranslate响应文本:', responseText);
+        
+        if (!responseText || responseText.trim() === '' || responseText === 'undefined') {
+            throw new Error(`LibreTranslate返回空响应: ${responseText}`);
+        }
+        
+        const data = JSON.parse(responseText);
+        console.log('LibreTranslate解析数据:', data);
+        
+        if (data && data.translatedText) {
+            const translated = data.translatedText;
+            console.log(`✅ LibreTranslate翻译成功: ${text} -> ${translated}`);
+            return translated;
+        }
+        
+        throw new Error('LibreTranslate返回数据格式异常');
+        
+    } catch (error) {
+        console.error('LibreTranslate失败:', error);
+        throw error;
+    }
+}
+
+// 本地环境下的翻译API（原MyMemory API）
+async function translateWithMyMemoryAPI(text, targetLang) {
+    console.log('使用MyMemory翻译API');
+    
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`;
+    console.log(`请求URL: ${url}`);
+    
+    console.log('发送fetch请求...');
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+    });
+    
+    console.log(`HTTP响应状态: ${response.status} ${response.statusText}`);
+    console.log(`响应头: ${JSON.stringify(Object.fromEntries(response.headers))}`);
+    
+    if (!response.ok) {
+        console.error(`HTTP请求失败: ${response.status} - ${response.statusText}`);
+        throw new Error(`HTTP错误: ${response.status}`);
+    }
+    
+    console.log('开始读取响应文本...');
+    const responseText = await response.text();
+    console.log(`响应文本长度: ${responseText.length}`);
+    console.log(`响应原始内容: ${responseText}`);
+    
+    if (!responseText || responseText.trim() === '' || responseText === 'undefined') {
+        console.error('API返回空响应或undefined');
+        throw new Error('响应为空或undefined');
+    }
+    
+    console.log('开始解析JSON...');
+    let data;
+    try {
+        data = JSON.parse(responseText);
+        console.log('JSON解析成功');
+        console.log(`解析后的数据: ${JSON.stringify(data, null, 2)}`);
+    } catch (jsonError) {
+        console.error('=== JSON解析失败 ===');
+        console.error(`JSON错误: ${jsonError.message}`);
+        console.error(`JSON错误堆栈: ${jsonError.stack}`);
+        console.error(`尝试解析的原始内容: ${responseText}`);
+        console.error(`内容类型: ${typeof responseText}`);
+        console.error(`内容长度: ${responseText.length}`);
+        throw new Error(`JSON解析失败: ${jsonError.message}`);
+    }
+    
+    console.log('检查API响应数据结构...');
+    console.log(`responseStatus: ${data.responseStatus}`);
+    console.log(`responseData: ${JSON.stringify(data.responseData)}`);
+    
+    if (data && data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
+        const translated = data.responseData.translatedText;
+        console.log(`✅ MyMemory翻译成功: ${text} -> ${translated}`);
+        return translated;
+    } else {
+        console.warn('⚠️ MyMemory翻译API返回非成功状态或数据结构异常');
+        console.warn(`完整响应数据: ${JSON.stringify(data, null, 2)}`);
+        throw new Error('MyMemory API返回非成功状态');
     }
 }
 
