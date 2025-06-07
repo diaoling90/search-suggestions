@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="title">AI搜索建议助手</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-brain"></i>
+                <span data-i18n="brand">AI搜索助手</span>
+            </div>
+            <div class="nav-controls">
+                <div class="lang-selector">
+                    <i class="fas fa-globe"></i>
+                    <select id="langSelect">
+                        <option value="zh">中文</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <!-- 标题区域 -->
+        <section class="hero-section">
+            <div class="hero-content">
+                <h1 class="hero-title">
+                    <i class="fas fa-magic gradient-icon"></i>
+                    <span data-i18n="heroTitle">智能搜索建议生成器</span>
+                </h1>
+                <p class="hero-subtitle" data-i18n="heroSubtitle">
+                    基于Google搜索API，智能生成和分析搜索建议，支持批量处理和多语言翻译
+                </p>
+            </div>
+        </section>
+
+        <!-- 控制面板 -->
+        <section class="control-panel">
+            <div class="panel-card">
+                <div class="panel-header">
+                    <h2 data-i18n="configTitle">配置管理</h2>
+                    <div class="panel-actions">
+                        <button class="btn btn-secondary" id="importConfigBtn">
+                            <i class="fas fa-upload"></i>
+                            <span data-i18n="importConfig">导入配置</span>
+                        </button>
+                        <button class="btn btn-secondary" id="exportConfigBtn">
+                            <i class="fas fa-download"></i>
+                            <span data-i18n="exportConfig">导出配置</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label data-i18n="wordRoots">词根列表 (每行一个)</label>
+                            <textarea id="wordRoots" placeholder="输入词根，每行一个，如：
+AI
+machine learning
+data science" rows="4"></textarea>
+                            <div class="input-hint" data-i18n="wordRootsHint">
+                                词根将自动生成 a-z 组合的搜索词
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label data-i18n="fixedKeywords">固定关键词 (每行一个)</label>
+                            <textarea id="fixedKeywords" placeholder="输入固定关键词，每行一个，如：
+artificial intelligence tools
+best AI software 2024" rows="4"></textarea>
+                            <div class="input-hint" data-i18n="fixedKeywordsHint">
+                                直接使用的完整搜索关键词
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 操作面板 -->
+        <section class="action-panel">
+            <div class="action-buttons">
+                <button class="btn btn-primary btn-large" id="startCrawlBtn">
+                    <i class="fas fa-play"></i>
+                    <span data-i18n="startCrawl">开始获取建议</span>
+                </button>
+                <button class="btn btn-warning btn-large" id="stopCrawlBtn" style="display: none;">
+                    <i class="fas fa-stop"></i>
+                    <span data-i18n="stopCrawl">停止获取</span>
+                </button>
+                <button class="btn btn-success btn-large" id="downloadResultsBtn" style="display: none;">
+                    <i class="fas fa-download"></i>
+                    <span data-i18n="downloadResults">下载结果</span>
+                </button>
+                <div class="translate-controls" id="translateControls" style="display: none;">
+                    <div class="translate-lang-selector">
+                        <label data-i18n="translateTo">翻译到:</label>
+                        <select id="translateLangSelect">
+                            <option value="zh">中文 (Chinese)</option>
+                            <option value="en">英文 (English)</option>
+                            <option value="es">西班牙语 (Spanish)</option>
+                            <option value="fr">法语 (French)</option>
+                            <option value="de">德语 (German)</option>
+                            <option value="ja">日语 (Japanese)</option>
+                            <option value="ko">韩语 (Korean)</option>
+                            <option value="pt">葡萄牙语 (Portuguese)</option>
+                            <option value="ru">俄语 (Russian)</option>
+                            <option value="ar">阿拉伯语 (Arabic)</option>
+                            <option value="hi">印地语 (Hindi)</option>
+                            <option value="it">意大利语 (Italian)</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-info btn-large" id="translateBtn">
+                        <i class="fas fa-language"></i>
+                        <span data-i18n="translateResults">翻译结果</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 进度显示 -->
+        <section class="progress-section" id="progressSection" style="display: none;">
+            <div class="progress-card">
+                <div class="progress-header">
+                    <h3 data-i18n="crawlProgress">获取进度</h3>
+                    <div class="progress-stats">
+                        <span class="stat">
+                            <span data-i18n="processed">已处理:</span>
+                            <span id="processedCount">0</span>
+                        </span>
+                        <span class="stat">
+                            <span data-i18n="total">总数:</span>
+                            <span id="totalCount">0</span>
+                        </span>
+                        <span class="stat">
+                            <span data-i18n="success">成功:</span>
+                            <span id="successCount">0</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="current-keyword">
+                    <span data-i18n="currentKeyword">当前关键词:</span>
+                    <span id="currentKeywordText">-</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 结果显示 -->
+        <section class="results-section" id="resultsSection">
+            <div class="results-header">
+                <h2 data-i18n="results">搜索建议结果</h2>
+                <div class="results-controls">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchResults" placeholder="搜索结果..." data-i18n-placeholder="searchResults">
+                    </div>
+                </div>
+            </div>
+            <div class="results-grid" id="resultsGrid">
+                <!-- 结果将动态插入这里 -->
+            </div>
+        </section>
+
+        <!-- 统计面板 -->
+        <section class="stats-section" id="statsSection" style="display: none;">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="totalKeywords">0</div>
+                        <div class="stat-label" data-i18n="totalKeywords">总关键词数</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-lightbulb"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="totalSuggestions">0</div>
+                        <div class="stat-label" data-i18n="totalSuggestions">总建议数</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="successRate">0%</div>
+                        <div class="stat-label" data-i18n="successRate">成功率</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 加载遮罩层 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <div class="loading-text" data-i18n="loading">加载中...</div>
+        </div>
+    </div>
+
+    <!-- 隐藏的文件输入 -->
+    <input type="file" id="fileInput" accept=".json" style="display: none;">
+
+    <script src="script.js"></script>
+</body>
+</html> 
