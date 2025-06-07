@@ -99,7 +99,7 @@ const languageNames = {
 };
 
 // 全局变量
-let currentLang = localStorage.getItem('language') || 'zh';
+let currentLang = localStorage.getItem('language') || 'en';
 let crawlResults = [];
 let previousResults = JSON.parse(localStorage.getItem('previousResults')) || [];
 let isCrawling = false;
@@ -110,8 +110,8 @@ let crawlController = null;
 const translationCache = new Map();
 
 // 翻译频控配置
-const TRANSLATION_DELAY = 800; // 每次翻译间隔800ms
-const FALLBACK_TRANSLATION_DELAY = 2000; // 备用API延迟2秒
+const TRANSLATION_DELAY = 150; // 减少到150ms，大幅提速
+const FALLBACK_TRANSLATION_DELAY = 800; // 减少到800ms
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -323,8 +323,11 @@ async function getGoogleSuggestions(keyword) {
     }
 }
 
-// 翻译文本到指定语言
+// 翻译文本到指定语言 - 使用在线Google翻译API（类似Python版本）
 async function translateText(text, targetLang) {
+    // 快速返回英文
+    if (targetLang === 'en') return text;
+    
     // 检查缓存
     const cacheKey = `${text}_${targetLang}`;
     if (translationCache.has(cacheKey)) {
@@ -332,276 +335,28 @@ async function translateText(text, targetLang) {
     }
     
     try {
-        // 先尝试本地词典翻译
-        let translated = await mockTranslate(text, targetLang);
-        
-        // 如果本地翻译效果不好，尝试在线翻译
-        if (shouldUseFallbackTranslation(text, translated, targetLang)) {
-            translated = await fallbackTranslate(text, targetLang);
-        }
-        
-        translationCache.set(cacheKey, translated);
-        return translated;
-    } catch (error) {
-        console.error('翻译失败:', error);
-        return text; // 翻译失败返回原文
-    }
-}
-
-// 判断是否需要使用备用翻译
-function shouldUseFallbackTranslation(originalText, translatedText, targetLang) {
-    if (targetLang !== 'zh') return false; // 目前只对中文做深度翻译
-    
-    // 如果翻译后还有很多英文单词，说明翻译不完整
-    const englishWords = translatedText.match(/\b[a-zA-Z]+\b/g) || [];
-    const totalWords = originalText.split(/\s+/).length;
-    
-    // 如果超过30%的词汇没有被翻译，使用备用翻译
-    return englishWords.length > totalWords * 0.3;
-}
-
-// 备用在线翻译
-async function fallbackTranslate(text, targetLang) {
-    try {
-        // 使用MyMemory免费翻译API
+        // 使用Google翻译API（类似Python版本的GoogleTranslator）
         const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`);
         const data = await response.json();
         
-        if (data.responseStatus === 200 && data.responseData) {
-            await delay(FALLBACK_TRANSLATION_DELAY); // 频控
-            return data.responseData.translatedText;
+        let translated = text; // 默认返回原文
+        
+        if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
+            translated = data.responseData.translatedText;
         }
+        
+        translationCache.set(cacheKey, translated);
+        
+        // 添加延迟避免API限制
+        await delay(200);
+        
+        return translated;
     } catch (error) {
-        console.error('在线翻译失败:', error);
-    }
-    
-    // 如果在线翻译失败，返回增强的本地翻译
-    return await enhancedMockTranslate(text, targetLang);
-}
-
-// 增强的本地翻译
-async function enhancedMockTranslate(text, targetLang) {
-    if (targetLang === 'en') return text;
-    
-    // 超大型中文翻译词典
-    const enhancedDict = {
-        // 基础动词 (大幅扩展)
-        'delete': '删除', 'remove': '移除', 'erase': '擦除', 'clear': '清除',
-        'deactivate': '停用', 'disable': '禁用', 'enable': '启用', 'activate': '激活',
-        'edit': '编辑', 'modify': '修改', 'change': '更改', 'update': '更新',
-        'create': '创建', 'make': '制作', 'build': '构建', 'generate': '生成',
-        'find': '查找', 'search': '搜索', 'locate': '定位', 'discover': '发现',
-        'open': '打开', 'close': '关闭', 'start': '开始', 'stop': '停止',
-        'install': '安装', 'uninstall': '卸载', 'download': '下载', 'upload': '上传',
-        'save': '保存', 'backup': '备份', 'restore': '恢复', 'sync': '同步',
-        'share': '分享', 'send': '发送', 'receive': '接收', 'transfer': '传输',
-        'connect': '连接', 'disconnect': '断开', 'link': '链接', 'bind': '绑定',
-        'login': '登录', 'logout': '退出', 'signin': '登录', 'register': '注册',
-        'reset': '重置', 'restart': '重启', 'refresh': '刷新', 'reload': '重新加载',
-        'copy': '复制', 'paste': '粘贴', 'cut': '剪切', 'move': '移动',
-        'add': '添加', 'insert': '插入', 'append': '附加', 'include': '包含',
-        'block': '阻止', 'unblock': '解除阻止', 'ban': '禁止', 'allow': '允许',
-        'hide': '隐藏', 'show': '显示', 'view': '查看', 'preview': '预览',
-        'play': '播放', 'pause': '暂停', 'record': '录制', 'capture': '捕获',
-        'format': '格式化', 'convert': '转换', 'compress': '压缩', 'extract': '提取',
-        'encrypt': '加密', 'decrypt': '解密', 'protect': '保护', 'secure': '保护',
-        'scan': '扫描', 'analyze': '分析', 'check': '检查', 'verify': '验证',
-        'repair': '修复', 'fix': '修复', 'solve': '解决', 'troubleshoot': '故障排除',
-        'optimize': '优化', 'improve': '改进', 'enhance': '增强', 'boost': '提升',
-        
-        // 食物和烹饪
-        'cook': '烹饪', 'bake': '烘烤', 'boil': '煮', 'fry': '炸',
-        'eat': '吃', 'drink': '喝', 'taste': '品尝', 'prepare': '准备',
-        'cut': '切', 'slice': '切片', 'chop': '切碎', 'dice': '切丁',
-        'mix': '混合', 'stir': '搅拌', 'blend': '搅拌', 'whisk': '打蛋',
-        
-        // 学习和工作
-        'learn': '学习', 'study': '学习', 'practice': '练习', 'train': '训练',
-        'teach': '教', 'explain': '解释', 'understand': '理解', 'remember': '记住',
-        'write': '写', 'read': '读', 'calculate': '计算', 'solve': '解决',
-        'work': '工作', 'job': '工作', 'career': '职业', 'profession': '职业',
-        
-        // 健康和身体
-        'sleep': '睡觉', 'wake': '醒来', 'exercise': '锻炼', 'walk': '走路',
-        'run': '跑步', 'jump': '跳', 'swim': '游泳', 'dance': '跳舞',
-        'relax': '放松', 'rest': '休息', 'breathe': '呼吸', 'stretch': '伸展',
-        
-        // 疑问词和短语
-        'how to': '如何', 'what is': '什么是', 'where is': '在哪里',
-        'when to': '何时', 'why does': '为什么', 'which one': '哪一个',
-        'how do i': '我如何', 'how can i': '我怎么能', 'what does': '什么是',
-        
-        // 介词和连词
-        'for': '为了', 'in': '在', 'on': '在上面', 'at': '在',
-        'with': '与', 'without': '没有', 'from': '从', 'to': '到',
-        'by': '通过', 'through': '通过', 'during': '在期间', 'after': '之后',
-        'before': '之前', 'until': '直到', 'since': '自从', 'while': '当时',
-        
-        // 设备和技术
-        'phone': '手机', 'iphone': '苹果手机', 'android': '安卓',
-        'computer': '电脑', 'laptop': '笔记本电脑', 'desktop': '台式电脑',
-        'tablet': '平板电脑', 'ipad': '苹果平板', 'mac': '苹果电脑',
-        'windows': 'Windows系统', 'linux': 'Linux系统', 'ios': 'iOS系统',
-        'app': '应用', 'application': '应用程序', 'software': '软件',
-        'browser': '浏览器', 'chrome': 'Chrome浏览器', 'firefox': 'Firefox浏览器',
-        'safari': 'Safari浏览器', 'edge': 'Edge浏览器',
-        
-        // 社交媒体
-        'instagram': 'Instagram', 'facebook': 'Facebook', 'twitter': 'Twitter',
-        'tiktok': 'TikTok', 'youtube': 'YouTube', 'snapchat': 'Snapchat',
-        'whatsapp': 'WhatsApp', 'telegram': 'Telegram', 'wechat': '微信',
-        'account': '账户', 'profile': '个人资料', 'post': '发布',
-        'follow': '关注', 'unfollow': '取消关注', 'like': '点赞',
-        'comment': '评论', 'share': '分享', 'message': '消息',
-        
-        // 常见名词
-        'email': '邮件', 'password': '密码', 'username': '用户名',
-        'file': '文件', 'folder': '文件夹', 'document': '文档',
-        'photo': '照片', 'image': '图片', 'video': '视频',
-        'music': '音乐', 'song': '歌曲', 'movie': '电影',
-        'game': '游戏', 'book': '书', 'news': '新闻',
-        
-        // 时间相关
-        'today': '今天', 'tomorrow': '明天', 'yesterday': '昨天',
-        'morning': '早上', 'afternoon': '下午', 'evening': '晚上',
-        'night': '夜晚', 'week': '周', 'month': '月', 'year': '年',
-        
-        // 形容词
-        'best': '最好的', 'good': '好的', 'bad': '坏的', 'new': '新的',
-        'old': '旧的', 'big': '大的', 'small': '小的', 'fast': '快的',
-        'slow': '慢的', 'easy': '容易的', 'hard': '困难的', 'free': '免费的',
-        'cheap': '便宜的', 'expensive': '昂贵的', 'safe': '安全的',
-        'dangerous': '危险的', 'important': '重要的', 'useful': '有用的',
-        
-        // 数字和数量
-        'one': '一', 'two': '二', 'three': '三', 'many': '许多',
-        'few': '几个', 'some': '一些', 'all': '全部', 'most': '大多数',
-        'first': '第一', 'last': '最后', 'next': '下一个', 'previous': '上一个'
-    };
-    
-    let translated = text;
-    
-    // 按词汇长度排序，确保长词汇优先匹配
-    const sortedEntries = Object.entries(enhancedDict).sort((a, b) => b[0].length - a[0].length);
-    
-    // 应用翻译规则 - 使用词边界匹配
-    for (const [en, zh] of sortedEntries) {
-        const regex = new RegExp(`\\b${en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-        translated = translated.replace(regex, zh);
-    }
-    
-    // 频控延迟
-    await delay(TRANSLATION_DELAY);
-    
-    return translated;
-}
-
-// 模拟翻译函数（支持多语言）
-async function mockTranslate(text, targetLang) {
-    // 如果目标语言是英文，直接返回原文
-    if (targetLang === 'en') {
+        console.error('翻译失败:', error);
+        // 翻译失败直接返回原文（类似Python版本）
+        translationCache.set(cacheKey, text);
         return text;
     }
-    
-    // 对于中文，使用增强翻译
-    if (targetLang === 'zh') {
-        return await enhancedMockTranslate(text, targetLang);
-    }
-    
-    // 其他语言使用简化词典
-    const basicDicts = {
-        es: {
-            'how to': 'cómo', 'delete': 'eliminar', 'edit': 'editar',
-            'find': 'encontrar', 'make': 'hacer', 'best': 'mejor'
-        },
-        fr: {
-            'how to': 'comment', 'delete': 'supprimer', 'edit': 'modifier',
-            'find': 'trouver', 'make': 'faire', 'best': 'meilleur'
-        },
-        de: {
-            'how to': 'wie man', 'delete': 'löschen', 'edit': 'bearbeiten',
-            'find': 'finden', 'make': 'machen', 'best': 'beste'
-        },
-        ja: {
-            'how to': 'の方法', 'delete': '削除', 'edit': '編集',
-            'find': '見つける', 'make': '作る', 'best': '最高の'
-        },
-        ko: {
-            'how to': '하는 방법', 'delete': '삭제', 'edit': '편집',
-            'find': '찾기', 'make': '만들기', 'best': '최고의'
-        }
-    };
-    
-    const dict = basicDicts[targetLang] || {};
-    let translated = text;
-    
-    const sortedEntries = Object.entries(dict).sort((a, b) => b[0].length - a[0].length);
-    for (const [en, target] of sortedEntries) {
-        const regex = new RegExp(`\\b${en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-        translated = translated.replace(regex, target);
-    }
-    
-    await delay(TRANSLATION_DELAY);
-    return translated;
-}
-
-// 批量处理翻译
-async function processBatch(batch, targetLang) {
-    const promises = batch.map(async ({ result, suggestion }) => {
-        suggestion.translation = await translateText(suggestion.english, targetLang);
-        suggestion.translated = true;
-        suggestion.targetLang = targetLang;
-    });
-    
-    await Promise.all(promises);
-}
-
-// 更新已翻译的卡片
-function updateTranslatedCards(batch, targetLang) {
-    const cardElementsMap = new Map();
-    
-    // 建立结果到卡片元素的映射
-    document.querySelectorAll('.result-card').forEach((card, index) => {
-        if (index < crawlResults.length) {
-            cardElementsMap.set(crawlResults[index], card);
-        }
-    });
-    
-    // 更新相关的卡片
-    const updatedResults = new Set();
-    batch.forEach(({ result }) => {
-        updatedResults.add(result);
-    });
-    
-    updatedResults.forEach(result => {
-        const cardElement = cardElementsMap.get(result);
-        if (cardElement) {
-            updateExistingCardTranslations(cardElement, result, targetLang);
-        }
-    });
-}
-
-// 更新现有卡片的翻译内容
-function updateExistingCardTranslations(cardElement, result, targetLang) {
-    // 更新建议内容
-    const suggestionItems = cardElement.querySelectorAll('.suggestion-item');
-    result.suggestions.forEach((suggestion, index) => {
-        if (index < suggestionItems.length && suggestion.translated && suggestion.targetLang === targetLang) {
-            const item = suggestionItems[index];
-            let translationEl = item.querySelector('.suggestion-translation');
-            
-            if (suggestion.translation && !translationEl) {
-                // 添加翻译内容
-                translationEl = document.createElement('div');
-                translationEl.className = 'suggestion-translation';
-                translationEl.textContent = suggestion.translation;
-                item.appendChild(translationEl);
-            } else if (suggestion.translation && translationEl) {
-                // 更新翻译内容
-                translationEl.textContent = suggestion.translation;
-            }
-        }
-    });
 }
 
 // 延迟函数
@@ -959,127 +714,123 @@ window.addEventListener('beforeunload', function() {
 
 console.log('AI搜索建议助手已加载完成');
 
-// 翻译结果
+// 翻译结果 - 最简单版本，必须能工作
 async function translateResults() {
     if (isTranslating || crawlResults.length === 0) return;
     
     const targetLang = document.getElementById('translateLangSelect').value;
     const translateBtn = document.getElementById('translateBtn');
-    const originalText = translateBtn.querySelector('span').textContent;
     
     isTranslating = true;
-    
-    // 更新按钮状态
     translateBtn.disabled = true;
-    translateBtn.querySelector('span').textContent = translations[currentLang].translating;
-    translateBtn.querySelector('i').className = 'fas fa-spinner fa-spin';
-    
-    showToast(translations[currentLang].translateInProgress, 'info');
+    translateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>翻译中...</span>';
     
     try {
-        let totalResults = crawlResults.filter(r => r.success).length;
-        let translatedResults = 0;
-        let highQualityCount = 0;
-        let fallbackUsedCount = 0;
+        console.log('=== 开始翻译 ===');
+        console.log('目标语言:', targetLang);
+        console.log('结果数量:', crawlResults.length);
         
-        // 逐个处理每个结果卡片
-        for (let i = 0; i < crawlResults.length; i++) {
-            const result = crawlResults[i];
+        // 直接遍历所有卡片和建议
+        for (let cardIndex = 0; cardIndex < crawlResults.length; cardIndex++) {
+            const result = crawlResults[cardIndex];
             
-            if (result.success) {
-                // 更新进度显示
-                const progress = Math.round((translatedResults / totalResults) * 100);
-                translateBtn.querySelector('span').textContent = `${translations[currentLang].translating} ${progress}% (${translatedResults + 1}/${totalResults})`;
+            if (!result.success || !result.suggestions) continue;
+            
+            console.log(`处理卡片 ${cardIndex}: ${result.keyword}`);
+            
+            for (let sugIndex = 0; sugIndex < result.suggestions.length; sugIndex++) {
+                const suggestion = result.suggestions[sugIndex];
                 
-                // 翻译当前结果的所有建议
-                for (const suggestion of result.suggestions) {
-                    if (!suggestion.translated || suggestion.targetLang !== targetLang) {
-                        const originalText = suggestion.english;
-                        suggestion.translation = await translateText(originalText, targetLang);
-                        suggestion.translated = true;
-                        suggestion.targetLang = targetLang;
-                        
-                        // 检查翻译质量
-                        const qualityScore = checkTranslationQuality(originalText, suggestion.translation, targetLang);
-                        if (qualityScore > 0.7) {
-                            highQualityCount++;
-                        } else if (qualityScore < 0.3) {
-                            fallbackUsedCount++;
-                        }
-                    }
-                }
+                console.log(`翻译建议 ${sugIndex}: ${suggestion.english}`);
                 
-                result.translated = true;
-                result.targetLang = targetLang;
+                // 翻译文本
+                const translated = await translateText(suggestion.english, targetLang);
+                console.log(`翻译结果: ${translated}`);
                 
-                // 立即更新当前卡片的显示
-                updateSingleCardTranslation(i, result, targetLang);
+                // 更新按钮进度
+                const progress = Math.round(((cardIndex * 10 + sugIndex + 1) / (crawlResults.length * 10)) * 100);
+                translateBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> <span>翻译中... ${progress}%</span>`;
                 
-                translatedResults++;
+                // 立即显示翻译 - 用最直接的方法
+                addTranslationToPage(cardIndex, sugIndex, translated);
                 
-                // 显示实时质量统计
-                if (translatedResults % 5 === 0) {
-                    const qualityRate = Math.round((highQualityCount / (translatedResults * 10)) * 100);
-                    console.log(`翻译质量统计: 高质量翻译率 ${qualityRate}%, 使用备用翻译 ${fallbackUsedCount} 次`);
-                }
+                await delay(100);
             }
         }
         
-        // 计算最终翻译质量
-        const totalSuggestions = crawlResults.reduce((sum, r) => sum + (r.success ? r.suggestions.length : 0), 0);
-        const qualityRate = Math.round((highQualityCount / totalSuggestions) * 100);
-        
-        let completeMessage = translations[currentLang].translateComplete;
-        if (targetLang === 'zh') {
-            completeMessage += ` (翻译质量: ${qualityRate}%)`;
-        }
-        
-        showToast(completeMessage, 'success');
-        
-        // 显示所有翻译结果
-        setTimeout(() => {
-            document.querySelectorAll('.suggestion-translation').forEach(el => {
-                el.classList.add('show');
-            });
-            
-            // 标记所有卡片为已翻译
-            document.querySelectorAll('.result-card').forEach(card => {
-                card.classList.add('translated');
-            });
-        }, 100);
+        console.log('=== 翻译完成 ===');
+        showToast('翻译完成！', 'success');
         
     } catch (error) {
-        console.error('翻译过程出错:', error);
-        showToast(translations[currentLang].translateFailed + ': ' + error.message, 'error');
+        console.error('翻译出错:', error);
+        showToast('翻译失败', 'error');
     } finally {
         isTranslating = false;
         translateBtn.disabled = false;
-        translateBtn.querySelector('span').textContent = originalText;
-        translateBtn.querySelector('i').className = 'fas fa-language';
+        translateBtn.innerHTML = '<i class="fas fa-language"></i> <span>翻译结果</span>';
     }
 }
 
-// 检查翻译质量
-function checkTranslationQuality(originalText, translatedText, targetLang) {
-    if (targetLang !== 'zh') return 1; // 暂时只对中文做质量检查
+// 添加翻译到页面 - 最简单直接的方法
+function addTranslationToPage(cardIndex, suggestionIndex, translatedText) {
+    console.log(`=== 添加翻译到页面 ===`);
+    console.log(`卡片索引: ${cardIndex}, 建议索引: ${suggestionIndex}`);
+    console.log(`翻译内容: ${translatedText}`);
     
-    const originalWords = originalText.toLowerCase().split(/\s+/);
-    const translatedWords = translatedText.split(/\s+/);
+    // 获取所有卡片
+    const allCards = document.querySelectorAll('.result-card');
+    console.log(`找到 ${allCards.length} 个卡片`);
     
-    // 计算英文单词残留率
-    const remainingEnglishWords = translatedText.match(/\b[a-zA-Z]+\b/g) || [];
-    const englishRetentionRate = remainingEnglishWords.length / originalWords.length;
+    if (cardIndex >= allCards.length) {
+        console.error('卡片索引超出范围');
+        return;
+    }
     
-    // 计算翻译覆盖率
-    const coverageRate = 1 - englishRetentionRate;
+    const targetCard = allCards[cardIndex];
+    console.log('目标卡片:', targetCard);
     
-    // 检查是否有关键词被翻译
-    const keyWords = ['how', 'to', 'what', 'is', 'the', 'and', 'or', 'for', 'in', 'on', 'with'];
-    const translatedKeyWords = keyWords.filter(word => 
-        !translatedText.toLowerCase().includes(word)
-    ).length;
-    const keyWordScore = translatedKeyWords / keyWords.length;
+    // 获取卡片内的所有建议项
+    const suggestionItems = targetCard.querySelectorAll('.suggestion-item');
+    console.log(`找到 ${suggestionItems.length} 个建议项`);
     
-    // 综合评分
-    return (coverageRate * 0.7) + (keyWordScore * 0.3);
+    if (suggestionIndex >= suggestionItems.length) {
+        console.error('建议索引超出范围');
+        return;
+    }
+    
+    const targetItem = suggestionItems[suggestionIndex];
+    console.log('目标建议项:', targetItem);
+    
+    // 删除已有的翻译（如果存在）
+    const oldTranslation = targetItem.querySelector('.suggestion-translation');
+    if (oldTranslation) {
+        oldTranslation.remove();
+        console.log('删除了旧的翻译');
+    }
+    
+    // 创建翻译元素
+    const translationElement = document.createElement('div');
+    translationElement.className = 'suggestion-translation';
+    translationElement.innerHTML = `<strong style="color: #ffffff;">${translatedText}</strong>`;
+    
+    // 设置明显的样式，确保可见
+    translationElement.style.cssText = `
+        padding: 5px !important;
+        margin: 5px 0 !important;
+        border-radius: 5px !important;
+        font-weight: bold !important;
+        font-size: 14px !important;
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    `;
+    
+    // 添加到建议项
+    targetItem.appendChild(translationElement);
+    
+    // 标记卡片
+    targetCard.style.borderLeft = '5px';
+    
+    console.log('✅ 翻译元素已添加到页面');
+    console.log('翻译元素:', translationElement);
 } 
