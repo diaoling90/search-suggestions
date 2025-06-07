@@ -363,7 +363,8 @@ async function translateText(text, targetLang) {
         
         if (isCloudflare) {
             // Cloudflare环境使用兼容的翻译服务
-            translated = await translateWithCloudflareAPI(text, targetLang);
+            // translated = await translateWithCloudflareAPI(text, targetLang);
+            translated = await translateWithMyMemoryAPI(text, targetLang);
         } else {
             // 本地环境使用原来的API
             translated = await translateWithMyMemoryAPI(text, targetLang);
