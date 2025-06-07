@@ -323,7 +323,7 @@ async function getGoogleSuggestions(keyword) {
     }
 }
 
-// 翻译文本到指定语言 - 使用在线Google翻译API（类似Python版本）
+// 翻译文本到指定语言 - 详细错误日志版本
 async function translateText(text, targetLang) {
     // 快速返回英文
     if (targetLang === 'en') return text;
@@ -331,18 +331,74 @@ async function translateText(text, targetLang) {
     // 检查缓存
     const cacheKey = `${text}_${targetLang}`;
     if (translationCache.has(cacheKey)) {
+        console.log(`从缓存获取翻译: ${text} -> ${translationCache.get(cacheKey)}`);
         return translationCache.get(cacheKey);
     }
     
     try {
-        // 使用Google翻译API（类似Python版本的GoogleTranslator）
-        const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`);
-        const data = await response.json();
+        console.log(`=== 开始翻译请求 ===`);
+        console.log(`原文: ${text}`);
+        console.log(`目标语言: ${targetLang}`);
+        
+        // 使用Google翻译API
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`;
+        console.log(`请求URL: ${url}`);
+        
+        console.log('发送fetch请求...');
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        console.log(`HTTP响应状态: ${response.status} ${response.statusText}`);
+        console.log(`响应头: ${JSON.stringify(Object.fromEntries(response.headers))}`);
+        
+        if (!response.ok) {
+            console.error(`HTTP请求失败: ${response.status} - ${response.statusText}`);
+            throw new Error(`HTTP错误: ${response.status}`);
+        }
+        
+        console.log('开始读取响应文本...');
+        const responseText = await response.text();
+        console.log(`响应文本长度: ${responseText.length}`);
+        console.log(`响应原始内容: ${responseText}`);
+        
+        if (!responseText || responseText.trim() === '') {
+            console.error('API返回空响应');
+            throw new Error('响应为空');
+        }
+        
+        console.log('开始解析JSON...');
+        let data;
+        try {
+            data = JSON.parse(responseText);
+            console.log('JSON解析成功');
+            console.log(`解析后的数据: ${JSON.stringify(data, null, 2)}`);
+        } catch (jsonError) {
+            console.error('=== JSON解析失败 ===');
+            console.error(`JSON错误: ${jsonError.message}`);
+            console.error(`JSON错误堆栈: ${jsonError.stack}`);
+            console.error(`尝试解析的原始内容: ${responseText}`);
+            console.error(`内容类型: ${typeof responseText}`);
+            console.error(`内容长度: ${responseText.length}`);
+            throw new Error(`JSON解析失败: ${jsonError.message}`);
+        }
         
         let translated = text; // 默认返回原文
         
-        if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
+        console.log('检查API响应数据结构...');
+        console.log(`responseStatus: ${data.responseStatus}`);
+        console.log(`responseData: ${JSON.stringify(data.responseData)}`);
+        
+        if (data && data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
             translated = data.responseData.translatedText;
+            console.log(`✅ 翻译成功: ${text} -> ${translated}`);
+        } else {
+            console.warn('⚠️ 翻译API返回非成功状态或数据结构异常');
+            console.warn(`完整响应数据: ${JSON.stringify(data, null, 2)}`);
         }
         
         translationCache.set(cacheKey, translated);
@@ -352,8 +408,14 @@ async function translateText(text, targetLang) {
         
         return translated;
     } catch (error) {
-        console.error('翻译失败:', error);
-        // 翻译失败直接返回原文（类似Python版本）
+        console.error('=== 翻译过程发生错误 ===');
+        console.error(`错误类型: ${error.name}`);
+        console.error(`错误消息: ${error.message}`);
+        console.error(`错误堆栈: ${error.stack}`);
+        console.error(`原文: ${text}`);
+        console.error(`目标语言: ${targetLang}`);
+        
+        // 翻译失败直接返回原文
         translationCache.set(cacheKey, text);
         return text;
     }
